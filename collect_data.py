@@ -1,22 +1,4 @@
-"""
-collect_data.py — Auto-generate YOLO training data from game.py's internal state
-
-Instead of inferring object positions from pixel colors, this reads the exact
-bounding boxes that game.py knows about — perfect ground-truth labels every time.
-
-Output structure:
-    dataset/
-        images/train/   ← screenshots (.jpg)
-        images/val/     ← validation screenshots
-        labels/train/   ← YOLO label files (.txt)
-        labels/val/
-        data.yaml       ← YOLO config file
-
-Usage:
-    python game.py          # terminal 1 — play normally
-    python collect_data.py  # terminal 2 — collects TARGET_FRAMES then stops
-"""
-
+# collect_data.py — Auto-generate YOLO training data from game.py's internal state
 import os
 import json
 import time
@@ -34,26 +16,24 @@ DATASET_DIR       = "dataset"
 
 TARGET_FRAMES = 500    # stop after this many labeled frames
 VAL_SPLIT     = 0.15   # fraction held out for validation
-MIN_FRAME_GAP = 0.1    # seconds between captures (avoids near-duplicate frames)
-MIN_OBJECTS   = 1      # skip completely empty frames
+MIN_FRAME_GAP = 0.1    # seconds between captures
+MIN_OBJECTS   = 1      # skip empty frames
 
 WIDTH, HEIGHT = 960, 540
 
 CLASS_NAMES = ["player", "zapper", "missile", "warning"]
 CLASS_ID    = {name: i for i, name in enumerate(CLASS_NAMES)}
 
-# Frames where player overlaps an obstacle above this IoU are skipped —
+# Frames where player overlaps an obstacle above this IoU are skipped
 # these are collision/near-death frames that teach YOLO the wrong thing
+# like player looking like a zapper, etc.
 MAX_PLAYER_OBSTACLE_IOU = 0.05
 
 # Skip frames where player center is within this many pixels of any obstacle bbox
-# Catches near-miss frames that still create confusing partial overlaps
 PROXIMITY_MARGIN = 20
 
 
-# ──────────────────────────────────────────────
-# Overlap / proximity checks
-# ──────────────────────────────────────────────
+# Overlap checks
 def iou(a: dict, b: dict) -> float:
     """Intersection-over-Union between two x/y/w/h dicts."""
     ax1, ay1 = a["x"], a["y"]
@@ -72,20 +52,18 @@ def iou(a: dict, b: dict) -> float:
 
 
 def player_too_close(player: dict, obstacles: list) -> bool:
-    """
-    Returns True if the player center is within PROXIMITY_MARGIN pixels
-    of any obstacle bounding box. Filters out near-death frames where the
-    player visually overlaps an obstacle even without a full IoU hit.
-    """
-    pcx = player["x"] + player["w"] / 2
-    pcy = player["y"] + player["h"] / 2
+    """Returns True if the PLAYER BBOX intersects any obstacle bbox"""
+    px1 = player["x"] - PROXIMITY_MARGIN
+    py1 = player["y"] - PROXIMITY_MARGIN
+    px2 = player["x"] + player["w"] + PROXIMITY_MARGIN
+    py2 = player["y"] + player["h"] + PROXIMITY_MARGIN
 
     for obs in obstacles:
         ox1 = obs["x"] - PROXIMITY_MARGIN
         oy1 = obs["y"] - PROXIMITY_MARGIN
         ox2 = obs["x"] + obs["w"] + PROXIMITY_MARGIN
         oy2 = obs["y"] + obs["h"] + PROXIMITY_MARGIN
-        if ox1 <= pcx <= ox2 and oy1 <= pcy <= oy2:
+        if px1 < ox2 and px2 > ox1 and py1 < oy2 and py2 > oy1:
             return True
     return False
 
@@ -108,17 +86,15 @@ def frame_is_clean(objects: list) -> bool:
 
     for obs in obstacle_objs:
         if iou(player, obs) > MAX_PLAYER_OBSTACLE_IOU:
-            return False  # direct overlap — skip
+            return False  # direct overlap
 
     if player_too_close(player, obstacle_objs):
-        return False  # dangerously close — skip
+        return False  # too close
 
     return True
 
 
-# ──────────────────────────────────────────────
 # YOLO label format: class_id cx cy w h  (normalised 0–1)
-# ──────────────────────────────────────────────
 def to_yolo_line(obj: dict) -> str | None:
     """Convert one game object dict to a YOLO label line."""
     label = obj["label"]
@@ -127,7 +103,7 @@ def to_yolo_line(obj: dict) -> str | None:
 
     x, y, w, h = obj["x"], obj["y"], obj["w"], obj["h"]
 
-    # Clamp to image bounds (objects may be partially off-screen)
+    # Clamp
     x = max(0, x)
     y = max(0, y)
     w = min(w, WIDTH  - x)
@@ -143,10 +119,6 @@ def to_yolo_line(obj: dict) -> str | None:
 
     return f"{CLASS_ID[label]} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
 
-
-# ──────────────────────────────────────────────
-# File loaders
-# ──────────────────────────────────────────────
 def load_frame(path: str) -> np.ndarray | None:
     try:
         rgb = np.load(path)
@@ -170,9 +142,7 @@ def get_mtime(path: str) -> float:
         return 0.0
 
 
-# ──────────────────────────────────────────────
 # Dataset setup
-# ──────────────────────────────────────────────
 def setup_dirs():
     for split in ("train", "val"):
         os.makedirs(f"{DATASET_DIR}/images/{split}", exist_ok=True)
@@ -193,9 +163,6 @@ names: {CLASS_NAMES}
     print(f"Wrote {DATASET_DIR}/data.yaml")
 
 
-# ──────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────
 def main():
     setup_dirs()
     write_yaml()
@@ -210,6 +177,7 @@ def main():
     last_mtime   = 0.0
     last_capture = 0.0
     saved_stems  = []
+    class_counts = {}
 
     try:
         while collected < TARGET_FRAMES:
@@ -239,12 +207,9 @@ def main():
 
             objects = state.get("objects", [])
 
-            # Skip frames where player is touching or near an obstacle —
-            # these are the exact frames that may teach YOLO "player looks like zapper"
             if not frame_is_clean(objects):
                 continue
 
-            # Build YOLO label lines directly from game state
             lines = [to_yolo_line(obj) for obj in objects]
             lines = [l for l in lines if l is not None]
 
@@ -262,11 +227,12 @@ def main():
 
             saved_stems.append(stem)
             collected += 1
+            for obj in objects:
+                class_counts[obj["label"]] = class_counts.get(obj["label"], 0) + 1
 
             if collected % 50 == 0 or collected == 1:
-                label_summary = ", ".join(obj["label"] for obj in objects)
-                print(f"  [{collected:>4}/{TARGET_FRAMES}]  "
-                      f"{len(objects)} objects  ({label_summary})")
+                counts_str = "  ".join(f"{k}={v}" for k, v in sorted(class_counts.items()))
+                print(f"  [{collected:>4}/{TARGET_FRAMES}]  {counts_str}")
 
     except KeyboardInterrupt:
         print("\nStopped early.")
@@ -275,7 +241,6 @@ def main():
         print("No frames collected — make sure game.py is running.")
         return
 
-    # ── Move validation split ─────────────────────────────────
     n_val      = max(1, int(len(saved_stems) * VAL_SPLIT))
     val_stems  = set(random.sample(saved_stems, n_val))
 
@@ -289,8 +254,13 @@ def main():
 
     n_train = len(saved_stems) - n_val
     print(f"\nDone!  {n_train} train  /  {n_val} val  frames in '{DATASET_DIR}/'")
-    print(f"  (Overlap/proximity filter kept your labels clean)")
-    print("Next step:  python train_yolo.py")
+    print(f"\nClass label counts:")
+    for cls in ["player", "zapper", "missile", "warning"]:
+        count = class_counts.get(cls, 0)
+        bar   = "█" * min(40, count // 5)
+        warn  = "  ← LOW, collect more!" if count < 80 else ""
+        print(f"  {cls:<10} {count:>4}  {bar}{warn}")
+    print("\nNext step:  python train_yolo.py")
 
 
 if __name__ == "__main__":

@@ -1,22 +1,9 @@
-"""
-train_yolo.py — Fine-tune YOLOv8 on your Jetpack game dataset
-
-Prerequisites:
-    pip install ultralytics
-
-Run after collect_data.py has built the dataset/:
-    python train_yolo.py
-
-Output:
-    runs/detect/jetpack/weights/best.pt   ← use this in vision.py
-"""
+#Fine-tune YOLOv8 on Jetpack dataset
 
 import os
 from ultralytics import YOLO
 
-# ──────────────────────────────────────────────
 # Config
-# ──────────────────────────────────────────────
 DATA_YAML   = "dataset/data.yaml"
 BASE_MODEL  = "yolov8s.pt"
 PROJECT     = "runs/detect"
@@ -38,9 +25,6 @@ def main():
     n_val     = len(os.listdir(val_dir))   if os.path.exists(val_dir)   else 0
     print(f"Dataset: {n_train} train / {n_val} val images")
 
-    if n_train < 50:
-        print("WARNING: Very few training images. Collect at least 200 for reliable results.")
-
     print(f"\nLoading base model: {BASE_MODEL}")
     model = YOLO(BASE_MODEL)
 
@@ -55,17 +39,23 @@ def main():
         exist_ok  = True,
         patience  = 20,
 
-        # ── Augmentation — helps player detection since it barely moves horizontally ──
-        fliplr    = 0.0,            # NO horizontal flip — missiles/zappers come from the right
-        flipud    = 0.0,            # NO vertical flip — gravity direction matters
-        mosaic    = 0.5,            # mosaic augmentation — exposes model to varied layouts
-        translate = 0.1,            # small random crop/translate
-        scale     = 0.4,            # scale jitter — helps with size variation
-        hsv_h     = 0.01,           # slight hue shift
-        hsv_s     = 0.3,            # saturation shift
-        hsv_v     = 0.3,            # brightness shift — helps if game lighting changes
+        fliplr    = 0.0,    # NO flip: player always left, obstacles always right
+        flipud    = 0.0,    # NO flip: gravity always down
+        mosaic    = 0.0,    # NO mosaic: stitches 4 frames → player ends up in wrong
+                            # quadrant, breaking "player=left" spatial prior
+        copy_paste= 0.0,    # NO copy-paste: same reason as mosaic
+        degrees   = 0.0,    # NO rotation: zappers have defined angles already
+        shear     = 0.0,
+        perspective=0.0,
+        translate = 0.05,   # very mild — keeps player near left edge
+        scale     = 0.3,    # mild scale jitter for size robustness
 
-        # ── Small object detection improvements ──
+        hsv_h     = 0.005,
+        hsv_s     = 0.2,
+        hsv_v     = 0.2,
+
+        cls       = 0.3,
+
         overlap_mask = True,
         cache     = True,
         verbose   = True,

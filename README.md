@@ -16,3 +16,5 @@ General Workflow
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 (If using nvidia GPU)
+
+- Best.pt is put in root if you wanna skip training.

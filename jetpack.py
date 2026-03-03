@@ -19,9 +19,7 @@ import json
 import numpy as np
 import pygame
 
-# ──────────────────────────────────────────────
 # Config
-# ──────────────────────────────────────────────
 WIDTH, HEIGHT = 960, 540
 FPS = 60
 
@@ -60,9 +58,7 @@ SHARED_FRAME_PATH = "shared_frame.npy"
 SHARED_STATE_PATH = "shared_state.json"
 
 
-# ──────────────────────────────────────────────
 # Helpers
-# ──────────────────────────────────────────────
 def clamp(v, lo, hi):
     return lo if v < lo else hi if v > hi else v
 
@@ -87,9 +83,7 @@ def dist_point_to_segment_sq(px, py, ax, ay, bx, by):
     return (px - cx) ** 2 + (py - cy) ** 2
 
 
-# ──────────────────────────────────────────────
 # Game Classes
-# ──────────────────────────────────────────────
 class Player:
     def __init__(self): self.reset()
 
@@ -117,9 +111,9 @@ class Player:
     def draw(self, surface):
         body = pygame.Rect(0, 0, PLAYER_W, PLAYER_H)
         body.center = self.rect.center
-        pygame.draw.rect(surface, (245, 210, 70), body, border_radius=8)
+        pygame.draw.rect(surface, (50, 205, 50), body, border_radius=8)
         helmet = pygame.Rect(body.x + 6, body.y + 8, body.w - 12, 14)
-        pygame.draw.rect(surface, (255, 245, 220), helmet, border_radius=7)
+        pygame.draw.rect(surface, (180, 255, 180), helmet, border_radius=7)
 
 
 class Zapper:
@@ -172,7 +166,7 @@ class MissileWarning:
     def draw(self, surface):
         alpha = int(160 + 80 * math.sin(self.t * 18))
         warn_surf = pygame.Surface((WIDTH, 28), pygame.SRCALPHA)
-        pygame.draw.rect(warn_surf, (255, 80, 80, alpha),
+        pygame.draw.rect(warn_surf, (255, 200, 0, alpha),
                          pygame.Rect(WIDTH - 220, 0, 210, 28), border_radius=10)
         surface.blit(warn_surf, (0, int(self.y - 14)))
 
@@ -210,9 +204,7 @@ class Particle:
         surface.blit(s, (self.x - radius, self.y - radius))
 
 
-# ──────────────────────────────────────────────
 # Frame export helper
-# ──────────────────────────────────────────────
 def export_frame(surface: pygame.Surface, path: str):
     """Convert pygame surface to BGR numpy array and save for vision.py to read."""
     rgb = pygame.surfarray.array3d(surface)          # (W, H, 3)
@@ -273,9 +265,7 @@ def export_state(player, zappers, missiles, warnings, world_speed, path: str):
         json.dump(state, f)
 
 
-# ──────────────────────────────────────────────
 # Main
-# ──────────────────────────────────────────────
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -370,7 +360,7 @@ def main():
         pygame.display.flip()
 
         # Share frame + state for vision.py / collect_data.py
-        # Only export when player is alive — dead/collision frames corrupt training labels
+        # Only export when player is alive
         frame_count += 1
         if frame_count % SHARE_EVERY_N_FRAMES == 0 and player.alive:
             export_frame(screen, SHARED_FRAME_PATH)
