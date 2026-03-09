@@ -19,7 +19,9 @@ import argparse
 # ──────────────────────────────────────────────
 # Config
 # ──────────────────────────────────────────────
-YOLO_WEIGHTS      = "runs/detect/runs/detect/jetpack/weights/best.pt"
+# YOLO_WEIGHTS      = "runs/detect/runs/detect/jetpack/weights/best.pt"
+YOLO_WEIGHTS      = "best.pt"
+
 YOLO_CONF_THRESH  = 0.45   # reject weak guesses
 
 SHARED_FRAME_PATH = "shared_frame.npy"

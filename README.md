@@ -1,10 +1,13 @@
-Make Sure
+### Python version 3.13.0 (Antonio)
 
+### Install  requirements
 pip install -r requirements.txt
 
-Python version 3.13.0 (Antonio)
+### Make sure venv is being used
+>Python: Select Interpreter --> python from venv
 
-General Workflow
+
+# General Workflow
 
 - Run Python jetpack.py, and in another terminal run python collect_data.py. Play the game until collect_data finishes.
 -> This looks at the gameplay, creates training data and labels. Saves to /dataset
