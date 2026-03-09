@@ -1,6 +1,8 @@
 Make Sure
 
-pip install opencv-python numpy pygame ultralytics
+pip install -r requirements.txt
+
+Python version 3.13.0 (Antonio)
 
 General Workflow
 
