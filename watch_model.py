@@ -36,8 +36,11 @@ from stable_baselines3 import PPO
 
 from game_core import (
     GameCore,
-    WIDTH, HEIGHT, FPS,
-    PLAYER_W, PLAYER_H,
+    WIDTH,
+    HEIGHT,
+    FPS,
+    PLAYER_W,
+    PLAYER_H,
     clamp,
 )
 
@@ -56,6 +59,12 @@ PARTICLE_RATE = 80  # particles/sec while thrusting
 def draw_text(surface, text, pos, font, color=UI_COLOR):
     img = font.render(text, True, color)
     surface.blit(img, pos)
+
+
+def center_draw_text(surface, text, pos, font, color=UI_COLOR):
+    img = font.render(text, True, color)
+    rect = img.get_rect(center=(int(pos[0]), int(pos[1])))
+    surface.blit(img, rect)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,10 +115,7 @@ def draw_zapper(surface: pygame.Surface, zapper):
 
     surf = pygame.Surface((w + 8, h + 8), pygame.SRCALPHA)
     pygame.draw.rect(surf, (70, 160, 255), pygame.Rect(4, 4, w, h), border_radius=6)
-    points = [
-        (4 + t / 14 * w, 4 + h / 2 + math.sin(zapper.phase + t / 14 * 10) * 5)
-        for t in range(15)
-    ]
+    points = [(4 + t / 14 * w, 4 + h / 2 + math.sin(zapper.phase + t / 14 * 10) * 5) for t in range(15)]
     pygame.draw.lines(surf, (220, 245, 255), False, points, 2)
 
     rotated = pygame.transform.rotate(surf, theta_draw)
@@ -179,6 +185,12 @@ def main(
                     core.reset(seed=seed)
                     particles.clear()
 
+                # Press T to reset episode
+                if event.key == pygame.K_t:
+                    seed = random.randint(0, 1000)
+                    core.reset(seed=seed)
+                    particles.clear()
+
         # Build observation exactly like training
         state = core.get_state()
         obs = env._make_obs(state.objects, state.world_speed)
@@ -218,7 +230,9 @@ def main(
         draw_text(screen, f"Action: {'THRUST' if thrusting else 'COAST'}", (16, 60), font)
 
         if not core.player.alive:
-            draw_text(screen, "CRASH! (Press R to reset)", (WIDTH // 2 - 220, HEIGHT // 2 - 60), big_font)
+            center_draw_text(screen, "CRASH!", (WIDTH // 2, HEIGHT // 2 - 60), big_font)
+            center_draw_text(screen, "Press R to reset", (WIDTH // 2, HEIGHT // 2 - 0), big_font)
+            center_draw_text(screen, "Press T to reset with new seed", (WIDTH // 2, HEIGHT // 2 + 30), big_font)
 
         pygame.display.flip()
 
