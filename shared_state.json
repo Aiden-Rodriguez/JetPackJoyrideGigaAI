@@ -1,1 +1,1 @@
-{"objects": [{"label": "player", "x": 121, "y": 102, "w": 38, "h": 48}, {"label": "zapper", "x": 112, "y": 149, "w": 287, "h": 28}, {"label": "missile", "x": 57, "y": 303, "w": 44, "h": 18}], "world_speed": 743.3306666666579, "score": 529.1633333333341, "alive": true}
+{"objects": [{"label": "player", "x": 121, "y": 219, "w": 38, "h": 48}, {"label": "zapper", "x": 160, "y": 191, "w": 28, "h": 293}], "world_speed": 639.2293333333254, "score": 399.036666666667, "alive": true}

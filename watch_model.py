@@ -1,32 +1,38 @@
 """
-jetpack.py — Jetpack Rectangle (pygame runner + frame/state sharing)
+watch_model.py
 
-This is your original game, refactored so the *gameplay logic* lives in
-`game_core.py`.
+Watch a trained PPO agent play the game visually in pygame, using the SAME
+shared gameplay core (GameCore) and the SAME observation builder logic as
+your Gym env.
 
-What changed?
--------------
-✅ The core update/spawn/collision logic is now in `GameCore`.
-✅ This file is now a thin pygame "runner": input → core.step() → draw.
-✅ Your existing vision tooling still works because we continue exporting:
-   - shared_frame.npy
-   - shared_state.json
+Prereqs:
+  pip install stable-baselines3 gymnasium numpy pygame
 
-Run solo:
-    python jetpack.py
+Run:
+  python watch_model.py
 
-Run with AI vision (launch both together):
-    python jetpack.py          # terminal 1
-    python vision.py           # terminal 2
+What this does:
+- Loads models/jetpack_ppo.zip
+- Creates a JetpackEnv (for its observation builder) but uses its internal
+  GameCore directly for stepping + rendering.
+- Each frame:
+    obs = env._make_obs(...)  -> model.predict(obs) -> action -> core.step()
+- Renders the scene similarly to jetpack.py so you can watch behavior.
+
+Notes:
+- Training uses fixed dt (1/60). For evaluation, we also use fixed dt to
+  match training dynamics and avoid real-time drift.
+- This file intentionally duplicates only the small rendering helpers from
+  jetpack.py to stay self-contained and avoid circular imports.
 """
 
 import sys
-import json
 import math
 import random
+from typing import Optional
 
-import numpy as np
 import pygame
+from stable_baselines3 import PPO
 
 from game_core import (
     GameCore,
@@ -35,54 +41,25 @@ from game_core import (
     clamp,
 )
 
+from jetpack_env import JetpackEnv  # we reuse its observation builder logic
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Runner-only config (colors, particles, exporting)
+# Visual config (same vibe as jetpack.py)
 # ─────────────────────────────────────────────────────────────────────────────
 BG_COLOR = (18, 18, 24)
 UI_COLOR = (230, 230, 240)
 
-PARTICLE_RATE = 80
-
-# How often to write a frame for vision.py (every N game frames)
-SHARE_EVERY_N_FRAMES = 2
-SHARED_FRAME_PATH = "shared_frame.npy"
-SHARED_STATE_PATH = "shared_state.json"
+PARTICLE_RATE = 80  # particles/sec while thrusting
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Small pygame helpers
-# ─────────────────────────────────────────────────────────────────────────────
 def draw_text(surface, text, pos, font, color=UI_COLOR):
     img = font.render(text, True, color)
     surface.blit(img, pos)
 
 
-def export_frame(surface: pygame.Surface, path: str):
-    """Convert pygame surface to RGB numpy array and save for vision.py to read."""
-    rgb = pygame.surfarray.array3d(surface)          # (W, H, 3)
-    rgb = np.transpose(rgb, (1, 0, 2))               # (H, W, 3)
-    np.save(path, rgb)
-
-
-def export_state(core: GameCore, path: str):
-    """Write ground-truth object bboxes + score/speed/alive to JSON.
-
-    This keeps your existing `collect_data.py` workflow working unchanged.
-    """
-    state = core.get_state()
-    payload = {
-        "objects": state.objects,
-        "world_speed": state.world_speed,
-        "score": state.score,
-        "alive": state.alive,
-    }
-    with open(path, "w") as f:
-        json.dump(payload, f)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
-# Runner-only particles (purely visual)
+# Simple exhaust particles (visual-only)
 # ─────────────────────────────────────────────────────────────────────────────
 class Particle:
     def __init__(self, x, y):
@@ -111,7 +88,7 @@ class Particle:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Rendering of core objects (kept here, so core stays headless)
+# Rendering of core objects (kept here so GameCore stays headless)
 # ─────────────────────────────────────────────────────────────────────────────
 def draw_player(surface: pygame.Surface, player_rect: pygame.Rect):
     body = pygame.Rect(0, 0, PLAYER_W, PLAYER_H)
@@ -122,7 +99,7 @@ def draw_player(surface: pygame.Surface, player_rect: pygame.Rect):
 
 
 def draw_zapper(surface: pygame.Surface, zapper):
-    # We still use the zapper's endpoints/phase/angle, which live in core.
+    # Uses zapper endpoints/phase/angle from GameCore's Zapper objects.
     theta_draw = -zapper.angle_deg
     w = int(zapper.length)
     h = 14
@@ -157,58 +134,74 @@ def draw_missile(surface: pygame.Surface, missile):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main pygame runner
+# Main loop: model drives thrust instead of keyboard
 # ─────────────────────────────────────────────────────────────────────────────
-def main():
+def main(
+    model_path: str = "models/jetpack_ppo.zip",
+    seed: Optional[int] = random.randint(0, 1000),
+):
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Jetpack Rectangle")
+    pygame.display.set_caption("Jetpack Rectangle — PPO Agent")
     clock = pygame.time.Clock()
 
     font = pygame.font.SysFont("consolas", 20)
     big_font = pygame.font.SysFont("consolas", 34, bold=True)
 
-    core = GameCore()
-    core.reset()
+    # Load policy
+    model = PPO.load(model_path)
+
+    # Create env solely to reuse its observation builder (same as training)
+    # IMPORTANT: we use env.core as our live GameCore so obs matches world.
+    env = JetpackEnv(k_threats=3, max_steps=60 * 60, seed=seed, fixed_dt=1.0 / 60.0)
+    env.reset(seed=seed)  # initializes env.core via GameCore.reset()
+
+    core: GameCore = env.core  # shared engine instance
 
     particles = []
-    frame_count = 0
+    fixed_dt = 1.0 / 60.0
 
     running = True
     while running:
-        # Note: RL will NOT use this runner. RL uses a fixed dt.
-        dt = min(clock.tick(FPS) / 1000.0, 1 / 30)
+        # Keep framerate reasonable; physics uses fixed_dt for determinism.
+        clock.tick(FPS)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-                if event.key == pygame.K_r and not core.player.alive:
-                    core.reset()
+
+                # Press R to reset episode
+                if event.key == pygame.K_r:
+                    core.reset(seed=seed)
                     particles.clear()
 
-        # Map keys → action (binary thrust)
-        keys = pygame.key.get_pressed()
-        thrusting = core.player.alive and (
-            keys[pygame.K_SPACE] or keys[pygame.K_UP] or keys[pygame.K_w]
-        )
+        # Build observation exactly like training
+        state = core.get_state()
+        obs = env._make_obs(state.objects, state.world_speed)
 
-        # Step the *core* engine (single source of truth)
-        core.step(dt=dt, thrusting=thrusting)
+        # Model chooses action: 0=no thrust, 1=thrust
+        action, _ = model.predict(obs, deterministic=True)
+        thrusting = bool(int(action) == 1) and core.player.alive
 
-        # Visual-only particles
+        # Step core with fixed dt (matches training)
+        core.step(dt=fixed_dt, thrusting=thrusting)
+
+        # Visual exhaust
         if thrusting and core.player.alive:
-            for _ in range(int(PARTICLE_RATE * dt)):
+            for _ in range(int(PARTICLE_RATE * fixed_dt)):
                 particles.append(Particle(core.player.rect.left + 6, core.player.rect.bottom - 10))
 
         for p in particles:
-            p.update(dt)
+            p.update(fixed_dt)
         particles = [p for p in particles if not p.dead()]
 
         # Render
         screen.fill(BG_COLOR)
+
         for z in core.zappers:
             draw_zapper(screen, z)
         for w in core.warnings:
@@ -217,20 +210,17 @@ def main():
             draw_missile(screen, m)
         for p in particles:
             p.draw(screen)
+
         draw_player(screen, core.player.rect)
 
         draw_text(screen, f"Score: {int(core.player.score):,}", (16, 12), font)
         draw_text(screen, f"Speed: {int(core.world_speed)}", (16, 36), font)
+        draw_text(screen, f"Action: {'THRUST' if thrusting else 'COAST'}", (16, 60), font)
+
         if not core.player.alive:
-            draw_text(screen, "CRASH!", (WIDTH // 2 - 70, HEIGHT // 2 - 60), big_font)
+            draw_text(screen, "CRASH! (Press R to reset)", (WIDTH // 2 - 220, HEIGHT // 2 - 60), big_font)
 
         pygame.display.flip()
-
-        # Share frame + state for vision.py / collect_data.py
-        frame_count += 1
-        if frame_count % SHARE_EVERY_N_FRAMES == 0 and core.player.alive:
-            export_frame(screen, SHARED_FRAME_PATH)
-            export_state(core, SHARED_STATE_PATH)
 
     pygame.quit()
     sys.exit()

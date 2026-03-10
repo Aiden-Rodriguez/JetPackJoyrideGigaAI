@@ -1,4 +1,19 @@
 opencv-python 
-numpy 
-pygame 
 ultralytics
+
+numpy>=1.26,<3
+pygame>=2.5.2
+gymnasium>=0.29.1
+stable-baselines3>=2.3.2
+
+tensorboard>=2.16.2
+tqdm>=4.66.2
+rich>=13.7.1
+
+cloudpickle>=3.0.0
+matplotlib>=3.8
+
+# IF ON WINDOWS: see Readme for install instructions (for cuda)
+# IF ON MAC: install, mps should be supported by base torch
+#torch>=2.2,<3
+#torchvision>=0.17,<1
