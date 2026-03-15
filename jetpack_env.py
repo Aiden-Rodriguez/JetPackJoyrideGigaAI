@@ -1,7 +1,7 @@
 """
 jetpack_env.py
 
-Gymnasium environment wrapper around the *native* gameplay code in `game_core.py`.
+Gymnasium environment wrapper around the *native* gameplay code in "game_core.py".
 
 Key properties
 --------------
@@ -42,8 +42,7 @@ class JetpackEnv(gym.Env):
 
     Observation design
     ------------------
-    We convert the current scene into a fixed-size numeric vector.
-    This avoids CNNs and trains faster.
+    Convert the current scene into a fixed-size numeric vector.
 
     Vector layout:
       [player_y_norm, player_vy_norm, world_speed_norm,

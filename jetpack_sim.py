@@ -1,18 +1,14 @@
 """
 jetpack_sim.py
 
-A headless (optional-render) simulator that mirrors the logic in jetpack.py:
+A headless (optional-render) simulator that emulates the logic in jetpack.py:
 - Player physics with gravity + thrust
 - Speed ramp
 - Zapper / missile spawns
 - Collision and death
 - Score accumulation
 
-This file is designed to integrate PPO training cleanly without needing
-to run two processes or read/write shared_state.json.
-
-The logic is intentionally kept close to jetpack.py's main loop so your
-agent trains on the "real" game dynamics (minus rendering).
+Runs PPO training without needing to run two processes and read/write to shared_state.json.
 """
 
 from __future__ import annotations

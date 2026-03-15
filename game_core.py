@@ -1,28 +1,15 @@
 """
 game_core.py
 
-Core (headless-friendly) game logic extracted from your original `jetpack.py`.
-
-Why this file exists
---------------------
-Reinforcement learning (and automated testing) works best when the *gameplay*
-logic can be stepped deterministically without opening a window or relying on
-real-time `clock.tick()`.
-
-This module contains:
+Core (headless-friendly) game logic This module contains:
   - Constants used by the game
   - Pure gameplay classes (Player, Zapper, MissileWarning, Missile)
-  - `GameCore`: a small engine with `reset()` and `step()`
+  - "GameCore": a small engine with "reset()" and "step()"
 
-Important design choice
------------------------
-This module intentionally **does not render** anything.
-It still uses `pygame.Rect` for collision math, but does not call
-`pygame.init()` or `pygame.display.*`.
 
-Your playable pygame runner (`jetpack.py`) should import and use `GameCore`.
-Your RL Gym environment should also import and use `GameCore`.
-That ensures the agent trains on the exact same logic you ship.
+Playable pygame runner ("jetpack.py") should import and use "GameCore".
+RL Gym environment also imports and uses "GameCore".
+That ensures the agent trains on the exact same logic.
 """
 
 from __future__ import annotations
@@ -222,7 +209,7 @@ class Missile:
 # ─────────────────────────────────────────────────────────────────────────────
 @dataclass
 class CoreState:
-    """Convenience container returned from `GameCore.step()` and `reset()`."""
+    """Convenience container returned from "GameCore.step()" and "reset()"."""
     objects: List[Dict[str, Any]]
     world_speed: float
     score: float
@@ -236,7 +223,7 @@ class GameCore:
         0 = no thrust
         1 = thrust
 
-    The pygame runner can pass a boolean `thrusting` too.
+    The pygame runner can pass a boolean "thrusting" too.
     """
 
     def __init__(self):

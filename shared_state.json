@@ -1,1 +1,1 @@
-{"objects": [{"label": "player", "x": 121, "y": 219, "w": 38, "h": 48}, {"label": "zapper", "x": 160, "y": 191, "w": 28, "h": 293}], "world_speed": 639.2293333333254, "score": 399.036666666667, "alive": true}
+{"objects": [{"label": "player", "x": 121, "y": 468, "w": 38, "h": 48}, {"label": "zapper", "x": -244, "y": 162, "w": 210, "h": 28}, {"label": "zapper", "x": 426, "y": 2, "w": 172, "h": 159}], "world_speed": 443.49066666666124, "score": 154.36333333333275, "alive": true}
