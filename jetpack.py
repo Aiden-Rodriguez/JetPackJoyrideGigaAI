@@ -1,17 +1,6 @@
 """
 jetpack.py — Jetpack Rectangle (pygame runner + frame/state sharing)
 
-This is your original game, refactored so the *gameplay logic* lives in
-`game_core.py`.
-
-What changed?
--------------
-✅ The core update/spawn/collision logic is now in `GameCore`.
-✅ This file is now a thin pygame "runner": input → core.step() → draw.
-✅ Your existing vision tooling still works because we continue exporting:
-   - shared_frame.npy
-   - shared_state.json
-
 Run solo:
     python jetpack.py
 
@@ -68,7 +57,7 @@ def export_frame(surface: pygame.Surface, path: str):
 def export_state(core: GameCore, path: str):
     """Write ground-truth object bboxes + score/speed/alive to JSON.
 
-    This keeps your existing `collect_data.py` workflow working unchanged.
+    This keeps your existing "collect_data.py" workflow working unchanged.
     """
     state = core.get_state()
     payload = {

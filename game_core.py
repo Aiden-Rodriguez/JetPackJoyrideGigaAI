@@ -186,7 +186,7 @@ class Missile:
 # Game engine
 @dataclass
 class CoreState:
-    """Convenience container returned from `GameCore.step()` and `reset()`."""
+    """Convenience container returned from "GameCore.step()" and "reset()"."""
     objects: List[Dict[str, Any]]
     world_speed: float
     score: float
@@ -198,6 +198,7 @@ class GameCore:
     Action convention (for RL):
         0 = no thrust
         1 = thrust
+
     The pygame runner can pass a boolean `thrusting` too.
     """
 
