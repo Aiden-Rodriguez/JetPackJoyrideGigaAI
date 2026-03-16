@@ -1,4 +1,4 @@
-# collect_data.py — Auto-generate YOLO training data from game.py's internal state
+# collect_data.py -> Generates training data for YOLO from the running game.
 import os
 import json
 import time
@@ -7,17 +7,14 @@ import shutil
 import numpy as np
 import cv2
 
-# ──────────────────────────────────────────────
-# Config
-# ──────────────────────────────────────────────
 SHARED_FRAME_PATH = "shared_frame.npy"
 SHARED_STATE_PATH = "shared_state.json"   # ground-truth positions from game.py
 DATASET_DIR       = "dataset"
 
-TARGET_FRAMES = 500    # stop after this many labeled frames
-VAL_SPLIT     = 0.15   # fraction held out for validation
-MIN_FRAME_GAP = 0.1    # seconds between captures
-MIN_OBJECTS   = 1      # skip empty frames
+TARGET_FRAMES = 500
+VAL_SPLIT     = 0.15
+MIN_FRAME_GAP = 0.1
+MIN_OBJECTS   = 1 
 
 WIDTH, HEIGHT = 960, 540
 
@@ -25,8 +22,6 @@ CLASS_NAMES = ["player", "zapper", "missile", "warning"]
 CLASS_ID    = {name: i for i, name in enumerate(CLASS_NAMES)}
 
 # Frames where player overlaps an obstacle above this IoU are skipped
-# these are collision/near-death frames that teach YOLO the wrong thing
-# like player looking like a zapper, etc.
 MAX_PLAYER_OBSTACLE_IOU = 0.05
 
 # Skip frames where player center is within this many pixels of any obstacle bbox

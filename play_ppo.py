@@ -6,10 +6,6 @@ Run a trained PPO agent in the headless Gym env.
 Run:
   python play_ppo.py
 
-Note:
-  This does not render. The fastest way to *see* the learned behavior is to
-  add a small renderer to JetpackEnv or use a separate evaluation script that
-  drives the pygame runner (jetpack.py) with model actions.
 """
 
 from stable_baselines3 import PPO

@@ -1,22 +1,3 @@
-"""
-jetpack_env.py
-
-Gymnasium environment wrapper around the *native* gameplay code in `game_core.py`.
-
-Key properties
---------------
-- Uses GameCore as the single source of truth (no duplicate physics/spawn logic).
-- Discrete(2) action space:
-    0 = no thrust
-    1 = thrust
-- Observation is a compact vector built from ground-truth object bboxes.
-  This trains far faster than pixels and matches your existing object-export
-  format (label/x/y/w/h).
-
-Install deps for RL:
-    pip install gymnasium stable-baselines3 numpy
-"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -31,6 +12,7 @@ from game_core import (
     HEIGHT,
     PLAY_TOP,
     PLAY_BOTTOM,
+    PLAYER_W,
     MAX_FALL_SPEED,
     MAX_RISE_SPEED,
     SCROLL_SPEED,
@@ -38,25 +20,12 @@ from game_core import (
 
 
 class JetpackEnv(gym.Env):
-    """Jetpack RL environment.
-
-    Observation design
-    ------------------
-    We convert the current scene into a fixed-size numeric vector.
-    This avoids CNNs and trains faster.
-
-    Vector layout:
-      [player_y_norm, player_vy_norm, world_speed_norm,
-       threats(K)*[dx, dy, w, h, is_zapper, is_missile],
-       warning_present]
-    """
-
     metadata = {"render_modes": ["none"], "render_fps": 60}
 
     def __init__(
         self,
         k_threats: int = 3,
-        max_steps: int = 60 * 60,  # ~60 seconds at 60 FPS
+        max_steps: int = 60 * 60 * 30,
         seed: Optional[int] = None,
         fixed_dt: float = 1.0 / 60.0,
     ):
@@ -69,11 +38,9 @@ class JetpackEnv(gym.Env):
         self.dt = float(fixed_dt)
         self.steps = 0
 
-        # Binary action: 0/1
         self.action_space = spaces.Discrete(2)
 
-        obs_dim = 3 + (self.k_threats * 6) + 1
-        # Wide bounds; we normalize in _make_obs.
+        obs_dim = 3 + 2 + (self.k_threats * 8) + 2
         self.observation_space = spaces.Box(
             low=-5.0, high=5.0, shape=(obs_dim,), dtype=np.float32
         )
@@ -82,11 +49,7 @@ class JetpackEnv(gym.Env):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
 
-        # If Gym provides a seed, use it (reproducibility when desired).
-        # Otherwise, do NOT reseed on reset; let the core RNG keep evolving,
-        # producing different episodes each time.
         if seed is not None:
-        # explicit seed overrides everything
             ep_seed = seed
         else:
             ep_seed = int(self._episode_rng.integers(0, 2**31 - 1))
@@ -94,31 +57,23 @@ class JetpackEnv(gym.Env):
         state = self.core.reset(seed=ep_seed)
         self.steps = 0
         obs = self._make_obs(state.objects, state.world_speed)
-
-        info = {"score": state.score, "alive": state.alive}
-        return obs, info
+        return obs, {"score": state.score, "alive": state.alive}
 
     def step(self, action: int):
         self.steps += 1
-
-        # Convert action to thrust boolean
         thrusting = bool(int(action) == 1)
 
-        prev_score = self.core.player.score
         state = self.core.step(dt=self.dt, thrusting=thrusting)
 
-        # Reward: survive longer.
-        # - +1 each step alive
-        # - small shaping using score delta
-        # - strong negative on death
         alive = state.alive
         terminated = not alive
         truncated = self.steps >= self.max_steps
 
-        score_delta = state.score - prev_score
-        reward = 1.0 + 0.05 * score_delta
-        if terminated:
-            reward = -100.0
+        # Simple, stable reward:
+        #   +1 every step alive   (survives longer → higher cumulative reward)
+        #   -50 on death          (strong but not overwhelming terminal signal)
+        # No score-delta shaping — it was just time * 10 * 0.05 = noise.
+        reward = -50.0 if terminated else 1.0
 
         obs = self._make_obs(state.objects, state.world_speed)
         info = {
@@ -129,43 +84,42 @@ class JetpackEnv(gym.Env):
 
         return obs, float(reward), bool(terminated), bool(truncated), info
 
-    # ──────────────────────────────────────────────────────────────────────
-    # Observation builder
-    # ──────────────────────────────────────────────────────────────────────
     def _make_obs(self, objects: List[Dict[str, Any]], world_speed: float) -> np.ndarray:
-        """Convert object list (label/x/y/w/h) to a fixed-size vector."""
+        play_range = float(PLAY_BOTTOM - PLAY_TOP)   # normalisation denominator
 
-        # Extract player bbox
         player = next((o for o in objects if o["label"] == "player"), None)
         if player is None:
-            # Should never happen, but keep robust.
-            player_x = 140.0
-            player_y = (PLAY_TOP + PLAY_BOTTOM) * 0.5
-            player_vy = 0.0
+            player_x   = 140.0
+            player_y   = (PLAY_TOP + PLAY_BOTTOM) * 0.5
+            player_vy  = 0.0
+            player_top = player_y - 24.0
+            player_bot = player_y + 24.0
         else:
-            player_x = float(player["x"] + player["w"] * 0.5)
-            player_y = float(player["y"] + player["h"] * 0.5)
-            # vy is internal state (ground truth) – allowed for fast training.
-            player_vy = float(self.core.player.vy)
+            player_x   = float(player["x"] + player["w"] * 0.5)
+            player_y   = float(player["y"] + player["h"] * 0.5)
+            player_vy  = float(self.core.player.vy)
+            player_top = float(player["y"])
+            player_bot = float(player["y"] + player["h"])
 
-        # Normalize primary scalars
-        y_center = (PLAY_TOP + PLAY_BOTTOM) * 0.5
-        y_half_range = (PLAY_BOTTOM - PLAY_TOP) * 0.5
-        y_norm = (player_y - y_center) / y_half_range
+        y_center    = (PLAY_TOP + PLAY_BOTTOM) * 0.5
+        y_half      = play_range * 0.5
+        y_norm      = (player_y - y_center) / y_half
+        vy_norm     = player_vy / max(MAX_FALL_SPEED, MAX_RISE_SPEED)
+        speed_norm  = (world_speed - SCROLL_SPEED) / 1000.0
 
-        vy_norm = player_vy / max(MAX_FALL_SPEED, MAX_RISE_SPEED)
+        dist_to_ceiling = max(0.0, player_top - PLAY_TOP)   / play_range
+        dist_to_floor   = max(0.0, PLAY_BOTTOM - player_bot) / play_range
 
-        # World speed slowly increases; keep it small.
-        speed_norm = (world_speed - SCROLL_SPEED) / 1000.0
-
-        # Gather threats
         warning_present = 0.0
-        threats = []  # list of (dx, dy, bbox, label)
+        warning_dy_norm = 0.0
+        threats = []
 
         for o in objects:
             label = o["label"]
             if label == "warning":
                 warning_present = 1.0
+                warn_cy = float(o["y"] + o["h"] * 0.5)
+                warning_dy_norm = (warn_cy - player_y) / HEIGHT
                 continue
             if label not in ("zapper", "missile"):
                 continue
@@ -174,33 +128,51 @@ class JetpackEnv(gym.Env):
             cy = float(o["y"] + o["h"] * 0.5)
             dx = cx - player_x
 
-            # Only consider upcoming hazards.
-            if dx <= -10:
+            if dx <= -float(PLAYER_W):
                 continue
 
             dy = cy - player_y
             threats.append((dx, dy, o, label))
 
-        # Nearest-first by dx
         threats.sort(key=lambda t: t[0])
         threats = threats[: self.k_threats]
 
-        # Pack into fixed slots
         threat_vec: List[float] = []
         for i in range(self.k_threats):
             if i < len(threats):
                 dx, dy, o, label = threats[i]
-                dx_n = dx / WIDTH
-                dy_n = dy / HEIGHT
-                w_n = float(o["w"]) / WIDTH
-                h_n = float(o["h"]) / HEIGHT
-                is_zapper = 1.0 if label == "zapper" else 0.0
-                is_missile = 1.0 if label == "missile" else 0.0
-                threat_vec.extend([dx_n, dy_n, w_n, h_n, is_zapper, is_missile])
-            else:
-                threat_vec.extend([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-        obs = np.array([y_norm, vy_norm, speed_norm, *threat_vec, warning_present], dtype=np.float32)
+                obs_top = float(o["y"])
+                obs_bot = float(o["y"] + o["h"])
+
+                # Space between the obstacle's top and the ceiling.
+                # 0.0 → obstacle is flush with ceiling → cannot pass above.
+                gap_above = max(0.0, obs_top - PLAY_TOP)    / play_range
+
+                # Space between the floor and the obstacle's bottom.
+                # 0.0 → obstacle is flush with floor → cannot pass below.
+                gap_below = max(0.0, PLAY_BOTTOM - obs_bot) / play_range
+
+                threat_vec.extend([
+                    dx / WIDTH,
+                    dy / HEIGHT,
+                    float(o["w"]) / WIDTH,
+                    float(o["h"]) / HEIGHT,
+                    1.0 if label == "zapper"  else 0.0,
+                    1.0 if label == "missile" else 0.0,
+                    gap_above,
+                    gap_below,
+                ])
+            else:
+                threat_vec.extend([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        obs = np.array(
+            [y_norm, vy_norm, speed_norm,
+             dist_to_ceiling, dist_to_floor,
+             *threat_vec,
+             warning_present, warning_dy_norm],
+            dtype=np.float32,
+        )
         return obs
 
     def close(self):

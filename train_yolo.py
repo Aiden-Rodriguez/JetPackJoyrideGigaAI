@@ -39,16 +39,16 @@ def main():
         exist_ok  = True,
         patience  = 20,
 
-        fliplr    = 0.0,    # NO flip: player always left, obstacles always right
-        flipud    = 0.0,    # NO flip: gravity always down
-        mosaic    = 0.0,    # NO mosaic: stitches 4 frames → player ends up in wrong
-                            # quadrant, breaking "player=left" spatial prior
-        copy_paste= 0.0,    # NO copy-paste: same reason as mosaic
-        degrees   = 0.0,    # NO rotation: zappers have defined angles already
+        fliplr    = 0.0,
+        flipud    = 0.0,
+        mosaic    = 0.0,
+
+        copy_paste= 0.0,
+        degrees   = 0.0,
         shear     = 0.0,
         perspective=0.0,
-        translate = 0.05,   # very mild — keeps player near left edge
-        scale     = 0.3,    # mild scale jitter for size robustness
+        translate = 0.05,
+        scale     = 0.3,
 
         hsv_h     = 0.005,
         hsv_s     = 0.2,

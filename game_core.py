@@ -1,28 +1,6 @@
 """
 game_core.py
-
-Core (headless-friendly) game logic extracted from your original `jetpack.py`.
-
-Why this file exists
---------------------
-Reinforcement learning (and automated testing) works best when the *gameplay*
-logic can be stepped deterministically without opening a window or relying on
-real-time `clock.tick()`.
-
-This module contains:
-  - Constants used by the game
-  - Pure gameplay classes (Player, Zapper, MissileWarning, Missile)
-  - `GameCore`: a small engine with `reset()` and `step()`
-
-Important design choice
------------------------
-This module intentionally **does not render** anything.
-It still uses `pygame.Rect` for collision math, but does not call
-`pygame.init()` or `pygame.display.*`.
-
-Your playable pygame runner (`jetpack.py`) should import and use `GameCore`.
-Your RL Gym environment should also import and use `GameCore`.
-That ensures the agent trains on the exact same logic you ship.
+Core game logic
 """
 
 from __future__ import annotations
@@ -34,10 +12,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pygame
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Config (copied from the original jetpack.py)
-# ─────────────────────────────────────────────────────────────────────────────
 WIDTH, HEIGHT = 960, 540
 FPS = 60
 
@@ -65,10 +39,6 @@ MISSILE_WARNING_TIME = 0.75
 MISSILE_SPEED = 650.0
 MISSILE_W, MISSILE_H = 44, 18
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 def clamp(v: float, lo: float, hi: float) -> float:
     return lo if v < lo else hi if v > hi else v
 
@@ -92,9 +62,6 @@ def dist_point_to_segment_sq(px, py, ax, ay, bx, by) -> float:
     return (px - cx) ** 2 + (py - cy) ** 2
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Gameplay classes (no rendering here)
-# ─────────────────────────────────────────────────────────────────────────────
 class Player:
     def __init__(self):
         self.reset()
@@ -114,7 +81,6 @@ class Player:
     def update(self, dt: float, thrusting: bool):
         """Update player position/velocity exactly like the original game."""
         if not self.alive:
-            # Keep falling after death (matches original behavior).
             self.vy += GRAVITY * dt
             self.y += self.vy * dt
             self._update_rect()
@@ -217,9 +183,7 @@ class Missile:
         return self.x < -60
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Game engine
-# ─────────────────────────────────────────────────────────────────────────────
 @dataclass
 class CoreState:
     """Convenience container returned from `GameCore.step()` and `reset()`."""
@@ -231,11 +195,9 @@ class CoreState:
 
 class GameCore:
     """Minimal engine that can be used by both pygame and RL.
-
     Action convention (for RL):
         0 = no thrust
         1 = thrust
-
     The pygame runner can pass a boolean `thrusting` too.
     """
 
